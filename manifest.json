@@ -1,6 +1,6 @@
 {
   "name": "GéoVoirie Expert",
-  "short_name": "GéoVoirie",
+  "short_name": "GeoVoirie",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#1e272e",
