@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Voirie Mairie - Expert</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+
+    <style>
+        :root { --primary: #1e272e; --accent: #2ecc71; --bg-dark: rgba(30, 39, 46, 0.98); }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        #app-container { display: flex; flex-direction: column; height: 100vh; }
+        
+        /* HEADER AVEC SLIDERS */
+        header { 
+            background: var(--primary); color: white; padding: 12px 20px; display: flex; 
+            justify-content: space-between; align-items: center; z-index: 1000; flex-wrap: wrap; gap: 10px;
+        }
+        #map { flex: 1; width: 100%; background: #1e272e !important; position: relative; }
+
+        .header-sliders {
+            display: flex; gap: 20px; align-items: center; background: rgba(0, 0, 0, 0.2);
+            padding: 6px 15px; border-radius: 20px;
+        }
+        .ctrl-group { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: bold; }
+        .ctrl-group input { cursor: pointer; accent-color: var(--accent); width: 80px; }
+
+        /* PIE MENU */
+        #pie-menu { position: absolute; width: 200px; height: 200px; z-index: 2000; display: none; pointer-events: none; }
+        .pie-item { 
+            position: absolute; width: 65px; height: 65px; background: var(--bg-dark); 
+            border: 1px solid var(--accent); border-radius: 50%; display: flex; 
+            align-items: center; justify-content: center; color: white; font-size: 10px; 
+            font-weight: bold; text-align: center; cursor: pointer; pointer-events: auto; 
+            transition: all 0.2s; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transform: translate(-50%, -50%); 
+        }
+        .pie-item:hover { background: var(--accent); color: var(--primary); transform: translate(-50%, -50%) scale(1.1); }
+        .pie-item.top { top: 20%; left: 50%; }
+        .pie-item.right { top: 50%; left: 80%; }
+        .pie-item.left { top: 50%; left: 20%; }
+        .pie-item.delete { border-color: #ff5252; color: #ff5252; }
+        .pie-item.delete:hover { background: #ff5252; color: white; }
+
+        /* UI GENERALE */
+        .controls { display: flex; gap: 8px; }
+        .btn { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: 0.2s; }
+        .btn:hover { opacity: 0.8; }
+        .btn-data { background: #34495e; color: white; }
+        .btn-export { background: var(--accent); color: #1e272e; }
+        .btn-clear { background: transparent; color: #ffab91; border: 1px solid #ffab91; }
+        .modern-popup .leaflet-popup-content-wrapper { background: var(--bg-dark); color: white; border-radius: 12px; }
+        .preview-img { width: 100%; border-radius: 6px; margin-top: 8px; }
+        
+        .shadow-voirie { filter: drop-shadow(2px 3px 4px rgba(0, 0, 0, 0.8)); transition: filter 0.2s; }
+        .shadow-voirie:hover { filter: drop-shadow(3px 5px 6px rgba(0, 0, 0, 0.9)); }
+
+        /* PANNEAU DE FILTRES */
+        .floating-panel {
+            position: absolute; top: 20px; right: 20px; z-index: 1000; background: var(--bg-dark); 
+            border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); color: white;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5); backdrop-filter: blur(8px);
+            width: 170px; overflow: hidden; 
+        }
+        .panel-header { 
+            padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; 
+            cursor: pointer; background: rgba(0,0,0,0.2); font-size: 13px; color: var(--accent); 
+            font-weight: bold; letter-spacing: 1px; user-select: none;
+        }
+        .panel-header:hover { background: rgba(0,0,0,0.4); }
+        .panel-content { display: flex; flex-direction: column; gap: 12px; padding: 15px; }
+        .panel-content label { font-size: 12px; display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 500; }
+        .panel-content input[type="checkbox"] { cursor: pointer; accent-color: var(--accent); width: 16px; height: 16px; }
+
+        /* MODALE DONNEES */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85); z-index: 3000; display: none;
+            justify-content: center; align-items: center; backdrop-filter: blur(5px);
+        }
+        .modal-container {
+            background: var(--primary); width: 90%; height: 85%; border-radius: 12px;
+            display: flex; flex-direction: column; overflow: hidden;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.7); border: 1px solid rgba(255,255,255,0.1);
+        }
+        .modal-header {
+            padding: 15px 20px; background: rgba(0,0,0,0.3); display: flex;
+            justify-content: space-between; align-items: center; color: white;
+        }
+        .modal-close { cursor: pointer; color: #ff5252; font-size: 24px; font-weight: bold; line-height: 1; }
+        .modal-tabs { display: flex; background: rgba(0,0,0,0.2); }
+        .tab-btn {
+            flex: 1; padding: 12px; background: none; border: none; color: #aaa;
+            cursor: pointer; font-weight: bold; font-size: 13px; border-bottom: 3px solid transparent; transition: 0.2s;
+        }
+        .tab-btn.active { color: var(--accent); border-bottom: 3px solid var(--accent); background: rgba(255,255,255,0.05); }
+        .tab-btn:hover:not(.active) { color: white; background: rgba(255,255,255,0.02); }
+        
+        /* BARRE DE RECHERCHE */
+        .modal-search { padding: 12px 20px; background: #1a2228; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .modal-search input { 
+            width: 100%; padding: 10px 15px; border-radius: 6px; border: 1px solid #555; 
+            background: #11161a; color: white; font-size: 13px; box-sizing: border-box;
+        }
+        .modal-search input:focus { outline: none; border-color: var(--accent); }
+
+        .modal-body { flex: 1; overflow: auto; padding: 0; background: #151b20; }
+        
+        /* TABLEAU */
+        .data-table { width: 100%; border-collapse: collapse; color: white; font-size: 12px; text-align: left; }
+        .data-table th { 
+            position: sticky; top: 0; background: var(--bg-dark); padding: 12px; 
+            color: var(--accent); font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); z-index: 10;
+        }
+        .data-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .data-table tr { cursor: pointer; transition: background 0.1s; } /* Curseur cliquable */
+        .data-table tr:hover td { background: rgba(46, 204, 113, 0.15); } /* Mise en surbrillance au survol */
+    </style>
+</head>
+<body>
+
+<div id="pie-menu"></div>
+
+<div id="data-modal" class="modal-overlay">
+    <div class="modal-container">
+        <div class="modal-header">
+            <h3 style="margin:0; font-size:16px;">📋 Table des attributs</h3>
+            <span class="modal-close" onclick="closeDataModal()">×</span>
+        </div>
+        <div class="modal-tabs">
+            <button class="tab-btn active" onclick="switchTab('voiries', this)">🛣️ Voiries</button>
+            <button class="tab-btn" onclick="switchTab('parcelles', this)">🟧 Parcelles</button>
+            <button class="tab-btn" onclick="switchTab('batiments', this)">🧱 Bâtiments</button>
+            <button class="tab-btn" onclick="switchTab('lieuxdits', this)">🏷️ Lieux-dits</button>
+            <button class="tab-btn" onclick="switchTab('notes', this)">📝 Notes</button>
+        </div>
+        
+        <div class="modal-search">
+            <input type="text" id="table-search" onkeyup="filterTable()" placeholder="🔍 Rechercher dans ce tableau (ex: nom de rue, numéro, type...)">
+        </div>
+
+        <div class="modal-body" id="table-container">
+            </div>
+    </div>
+</div>
+
+<div id="app-container">
+    <header>
+        <div><strong>GéoVoirie <span style="color:var(--accent)">v1.0</span></strong></div>
+        
+        <div class="header-sliders">
+            <div class="ctrl-group"><span>🛰️ SAT</span><input type="range" autocomplete="off" id="sat-op" min="0" max="1" step="0.1" value="0" oninput="satLayer.setOpacity(this.value)"></div>
+            <div class="ctrl-group"><span>🗺️ PLAN</span><input type="range" autocomplete="off" id="osm-op" min="0" max="1" step="0.1" value="0" oninput="osmLayer.setOpacity(this.value)"></div>
+        </div>
+
+        <div class="controls">
+            <button class="btn btn-data" onclick="openDataModal()">📋 Données</button>
+            <button class="btn btn-export" onclick="exportGeoJSON()">Exporter SIG</button>
+            <button class="btn btn-clear" onclick="clearData()">Vider</button>
+        </div>
+    </header>
+    
+    <div id="map">
+        <div id="filter-panel" class="floating-panel">
+            <div class="panel-header" onclick="toggleFilterPanel()">
+                <span>CALQUES</span>
+                <span id="panel-icon">▼</span>
+            </div>
+            <div id="panel-content" class="panel-content">
+                <label><input type="checkbox" id="chk-voiries" autocomplete="off" checked onchange="toggleLayer(layerVoiries, this.checked)"> 🛣️ Voiries</label>
+                <label><input type="checkbox" id="chk-parcelles" autocomplete="off" onchange="toggleLayer(layerCadastreParc, this.checked)"> 🟧 Parcelles</label>
+                <label><input type="checkbox" id="chk-batiments" autocomplete="off" onchange="toggleLayer(layerCadastreBat, this.checked)"> 🧱 Bâtiments</label>
+                <label><input type="checkbox" id="chk-lieuxdits" autocomplete="off" onchange="toggleLayer(layerCadastreLd, this.checked)"> 🏷️ Lieux-dits</label>
+                <label><input type="checkbox" id="chk-limites" autocomplete="off" checked onchange="toggleLayer(layerContour, this.checked)"> 📍 Limites</label>
+                <label><input type="checkbox" id="chk-notes" autocomplete="off" checked onchange="toggleLayer(layerAnnotations, this.checked)"> 📝 Notes</label>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="voiries.js"></script>
+<script src="contour.js"></script>
+<script src="cadastreParc.js"></script> 
+<script src="cadastreBat.js"></script>
+<script src="cadastreLd.js"></script> 
+<script>
+    const db = new Dexie("VoirieDB");
+    db.version(1).stores({ annotations: '++id, lat, lng, text, image, timestamp' });
+
+    const map = L.map('map',{
+    zoomControl:false,
+    preferCanvas:true
+}).setView([46.6,2.2],13);
+
+    const satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, opacity: 0 }).addTo(map);
+    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, opacity: 0 }).addTo(map);
+    
+    // Initialisation des calques Leaflet
+    const layerContour = L.layerGroup().addTo(map);
+    const layerVoiries = L.layerGroup().addTo(map);
+    const layerAnnotations = L.layerGroup().addTo(map);
+    const layerCadastreParc = L.layerGroup();
+    const layerCadastreBat = L.layerGroup();
+    const layerCadastreLd = L.layerGroup();
+
+    // Dictionnaire pour lier les noms d'onglets aux calques Leaflet
+    const layerGroups = {
+        'voiries': layerVoiries,
+        'parcelles': layerCadastreParc,
+        'batiments': layerCadastreBat,
+        'lieuxdits': layerCadastreLd,
+        'notes': layerAnnotations
+    };
+
+    // Sécurisation interactions UI
+    const filterPanel = document.getElementById('filter-panel');
+    L.DomEvent.disableClickPropagation(filterPanel);
+    L.DomEvent.disableScrollPropagation(filterPanel);
+
+    function toggleFilterPanel() {
+        const content = document.getElementById('panel-content');
+        const icon = document.getElementById('panel-icon');
+        if (content.style.display === 'none') {
+            content.style.display = 'flex'; icon.textContent = '▼';
+        } else {
+            content.style.display = 'none'; icon.textContent = '◀';
+        }
+    }
+
+    /** GESTION DES TABLEAUX & RECHERCHE **/
+    function openDataModal() {
+        document.getElementById('data-modal').style.display = 'flex';
+        document.querySelector('.tab-btn.active').click(); 
+    }
+
+    function closeDataModal() {
+        document.getElementById('data-modal').style.display = 'none';
+    }
+
+    // Filtre de recherche dynamique
+    function filterTable() {
+        const input = document.getElementById('table-search');
+        const filter = input.value.toLowerCase();
+        const table = document.getElementById('data-table');
+        if (!table) return;
+        const tr = table.getElementsByTagName('tr');
+
+        // On commence à 1 pour sauter la ligne d'en-tête (th)
+        for (let i = 1; i < tr.length; i++) {
+            // On ignore la ligne d'avertissement de limite des 500 éléments si elle existe
+            if (tr[i].cells.length === 1) continue; 
+            
+            let rowText = tr[i].textContent || tr[i].innerText;
+            if (rowText.toLowerCase().indexOf(filter) > -1) {
+                tr[i].style.display = "";
+            } else {
+                tr[i].style.display = "none";
+            }
+        }
+    }
+
+    function switchTab(datasetName, btnElement) {
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        btnElement.classList.add('active');
+        
+        // Vider la recherche au changement d'onglet
+        document.getElementById('table-search').value = ''; 
+
+        // On envoie le CALQUE Leaflet (et plus le fichier geojson brut)
+        renderTable(layerGroups[datasetName], datasetName);
+    }
+
+function renderTable(layerGroup, datasetName) {
+        const container = document.getElementById('table-container');
+        
+        // CORRECTION : On fouille dans les sous-groupes pour récupérer les vraies lignes
+        let layers = [];
+        layerGroup.eachLayer(layer => {
+            if (layer.feature) {
+                layers.push(layer); // Si l'élément est directement à la racine
+            } else if (layer.eachLayer) {
+                // Si c'est un sous-groupe (ce que L.geoJSON crée par défaut)
+                layer.eachLayer(subLayer => {
+                    if (subLayer.feature) layers.push(subLayer);
+                });
+            }
+        });
+
+        if (layers.length === 0) {
+            container.innerHTML = "<p style='padding:20px; color:#aaa; text-align:center;'>Aucune donnée disponible pour cette couche.</p>";
+            return;
+        }
+
+        // Récupération des noms de colonnes depuis le premier élément
+        let columns = Object.keys(layers[0].feature.properties);
+        
+        let html = '<table class="data-table" id="data-table"><thead><tr>';
+        columns.forEach(col => html += `<th>${col}</th>`);
+        html += '</tr></thead><tbody>';
+
+        const maxRows = Math.min(layers.length, 500);
+        
+        for(let i = 0; i < maxRows; i++) {
+            let layer = layers[i];
+            let props = layer.feature.properties || {};
+            let leafletId = layer._leaflet_id; 
+
+            html += `<tr onclick="zoomToFeature(${leafletId}, '${datasetName}')">`;
+            columns.forEach(col => {
+                let val = props[col] !== null && props[col] !== undefined ? props[col] : '-';
+                html += `<td>${val}</td>`;
+            });
+            html += '</tr>';
+        }
+        
+        if (layers.length > 500) {
+            html += `<tr><td colspan="${columns.length}" style="text-align:center; padding:15px; color:#e67e22; font-style:italic;">Affichage limité aux 500 premiers éléments par sécurité (utilisez votre logiciel SIG pour les traitements massifs).</td></tr>`;
+        }
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+
+    // La fameuse fonction de Zoom au clic !
+// La fameuse fonction de Zoom au clic !
+    function zoomToFeature(leafletId, datasetName) {
+        const targetGroup = layerGroups[datasetName];
+        if(!targetGroup) return;
+
+        let targetLayer = null;
+
+        // On fouille à la racine ET dans les sous-dossiers pour trouver notre objet
+        targetGroup.eachLayer(layer => {
+            if (layer._leaflet_id === leafletId) {
+                targetLayer = layer;
+            } else if (layer.eachLayer) {
+                layer.eachLayer(subLayer => {
+                    if (subLayer._leaflet_id === leafletId) {
+                        targetLayer = subLayer;
+                    }
+                });
+            }
+        });
+
+        if(targetLayer) {
+            closeDataModal(); // On ferme la fenêtre
+
+            // Si le calque était décoché dans le panneau, on l'affiche automatiquement !
+            if (!map.hasLayer(targetGroup)) {
+                map.addLayer(targetGroup);
+                // On met à jour visuellement la case à cocher
+                const checkbox = document.getElementById(`chk-${datasetName}`);
+                if (checkbox) checkbox.checked = true;
+            }
+
+            // On zoome sur l'objet (ligne/polygone ou point)
+            if (targetLayer.getBounds) {
+                map.fitBounds(targetLayer.getBounds(), { padding: [50, 50], maxZoom: 18 });
+            } else if (targetLayer.getLatLng) {
+                map.setView(targetLayer.getLatLng(), 18);
+            }
+            
+            // On déclenche l'ouverture de sa petite bulle d'info !
+            targetLayer.openPopup();
+        } else {
+            console.error("Objet introuvable sur la carte !");
+        }
+    }
+
+    /** PIE MENU **/
+    let lastLatLng = null; let selectedAnnotationId = null; const pieMenu = document.getElementById('pie-menu');
+    window.addEventListener('contextmenu', e => e.preventDefault());
+
+    function showPieMenu(e, type, id = null) {
+        lastLatLng = e.latlng; selectedAnnotationId = id; const pos = map.latLngToContainerPoint(e.latlng);
+        let html = '';
+        if (type === 'map') {
+            html = `<div class="pie-item top" onclick="handlePieAction('note')">📝<br>NOTE</div>
+                    <div class="pie-item right" onclick="handlePieAction('photo')">📸<br>PHOTO</div>
+                    <div class="pie-item left" onclick="handlePieAction('cancel')">✖<br>RETOUR</div>`;
+        } else {
+            html = `<div class="pie-item top delete" onclick="handlePieAction('delete')">🗑️<br>SUPPR.</div>
+                    <div class="pie-item left" onclick="handlePieAction('cancel')">✖<br>RETOUR</div>`;
+        }
+        pieMenu.innerHTML = html; pieMenu.style.display = 'block';
+        pieMenu.style.left = (pos.x - 100) + 'px'; pieMenu.style.top = (pos.y - 100) + 'px';
+    }
+
+    map.on('contextmenu', e => showPieMenu(e, 'map'));
+    map.on('mousedown', (e) => { if (e.originalEvent && e.originalEvent.button === 2) return; setTimeout(() => pieMenu.style.display = 'none', 150); });
+    map.on('movestart', () => pieMenu.style.display = 'none');
+
+    async function handlePieAction(action) {
+        pieMenu.style.display = 'none'; if (action === 'cancel') return;
+        if (action === 'delete') { if(confirm("Supprimer cette note ?")) { await db.annotations.delete(selectedAnnotationId); renderAnnotations(); } return; }
+        const tempMarker = L.marker(lastLatLng).addTo(map); const isPhoto = (action === 'photo');
+        tempMarker.bindPopup(`<div class="popup-form"><b style="color:var(--accent)">${action.toUpperCase()}</b>
+            <textarea id="pop_text" rows="3" placeholder="Texte..."></textarea>
+            <input type="file" id="pop_file" style="display:${isPhoto ? 'block' : 'none'}">
+            <button class="btn btn-export" style="width:100%;margin-top:10px" onclick="saveAnnotation(${lastLatLng.lat}, ${lastLatLng.lng})">ENREGISTRER</button></div>`, { className: 'modern-popup' }).openPopup();
+        tempMarker._saved = false; window.activeMarker = tempMarker;
+        tempMarker.on('popupclose', () => { if(!tempMarker._saved) map.removeLayer(tempMarker); });
+    }
+
+    async function saveAnnotation(lat, lng) {
+        const text = document.getElementById('pop_text').value.trim(); const file = document.getElementById('pop_file').files[0];
+        if (!text && !file) { alert("Veuillez saisir un texte ou ajouter une photo."); return; }
+        let img = file ? await toBase64(file) : null;
+        await db.annotations.add({ lat, lng, text, image: img, timestamp: new Date() });
+        window.activeMarker._saved = true; map.closePopup(); renderAnnotations();
+    }
+
+async function renderAnnotations() {
+        layerAnnotations.clearLayers();
+        const items = await db.annotations.toArray();
+        items.forEach(i => {
+            const m = L.marker([i.lat, i.lng]).addTo(layerAnnotations);
+            
+            // On déguise ce marqueur en objet avec des "propriétés"
+            m.feature = {
+                properties: {
+                    "Description": i.text || "(Photo sans texte)",
+                    "Latitude": i.lat.toFixed(6),
+                    "Longitude": i.lng.toFixed(6),
+                    "Date": new Date(i.timestamp).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+                }
+            };
+            
+            // Clic droit
+            m.on('contextmenu', (e) => {
+                L.DomEvent.stopPropagation(e);
+                showPieMenu(e, 'marker', i.id);
+            });
+
+            // Popup (clic gauche)
+            let html = `<div style="min-width:150px"><b>Note:</b><br>${i.text}`;
+            if (i.image) html += `<br><img src="${i.image}" class="preview-img">`;
+            html += `</div>`;
+            m.bindPopup(html, { className: 'modern-popup' });
+        });
+    } // Fin normale de la fonction (plus d'accolade orpheline en dessous !)
+
+    
+    const toBase64 = f => new Promise((res) => { const r = new FileReader(); r.readAsDataURL(f); r.onload = () => res(r.result); });
+
+    function generatePopupHtml(properties, title) {
+        let html = `<div style="max-height: 250px; overflow-y: auto; padding-right: 5px;">
+                    <b style="color:var(--accent); font-size:14px;">${title}</b>
+                    <table style="width:100%; font-size:12px; margin-top:8px; border-collapse: collapse;">`;
+        for (let key in properties) {
+            if (properties[key] !== null && typeof properties[key] !== 'object') {
+                html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                            <td style="padding: 4px; color: #aaa;">${key}</td>
+                            <td style="padding: 4px; font-weight: 500;">${properties[key]}</td>
+                         </tr>`;
+            }
+        }
+        html += `</table></div>`;
+        return html;
+    }
+    
+    function initData() {
+        if (typeof dataContour !== 'undefined') L.geoJSON(dataContour, { style: { color: "#ffffff", weight: 2, fillOpacity: 0, interactive: false } }).addTo(layerContour);
+        if (typeof dataVoiries !== 'undefined') {
+            const vLayer = L.geoJSON(dataVoiries, {
+                style: (f) => ({ color: (f.properties.ref || "").startsWith('D') ? "#e67e22" : "#6d7d59", weight: 4, opacity: 0.8, className: 'shadow-voirie' }),
+                onEachFeature: (f, l) => {
+                    l.on('mouseover', (e) => e.target.setStyle({ weight: 8, color: '#2ecc71', opacity: 1 })); l.on('mouseout', (e) => vLayer.resetStyle(e.target));
+                    if (f.properties) l.bindPopup(generatePopupHtml(f.properties, "🛣️ Info Voirie"), { className: 'modern-popup' });
+                    l.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); showPieMenu(e, 'map'); });
+                }
+            }).addTo(layerVoiries);
+            try { map.fitBounds(vLayer.getBounds()); } catch(e) {}
+        }
+        if (typeof dataCadastreParc !== 'undefined') {
+            L.geoJSON(dataCadastreParc, {
+                style: { color: "#f39c12", weight: 1, fillOpacity: 0.05 },
+                onEachFeature: (f, l) => {
+                    if (f.properties) l.bindPopup(generatePopupHtml(f.properties, "🟧 Parcelle"), { className: 'modern-popup' });
+                    l.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); showPieMenu(e, 'map'); });
+                }
+            }).addTo(layerCadastreParc);
+        }
+        if (typeof dataCadastreBat !== 'undefined') {
+            L.geoJSON(dataCadastreBat, {
+                style: { color: "#c0392b", weight: 1, fillColor: "#e74c3c", fillOpacity: 0.4 },
+                onEachFeature: (f, l) => {
+                    if (f.properties) l.bindPopup(generatePopupHtml(f.properties, "🧱 Bâtiment"), { className: 'modern-popup' });
+                    l.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); showPieMenu(e, 'map'); });
+                }
+            }).addTo(layerCadastreBat);
+        }
+        if (typeof dataCadastreLd !== 'undefined') {
+            L.geoJSON(dataCadastreLd, {
+                style: { color: "#9b59b6", weight: 2, fillOpacity: 0.1 },
+                onEachFeature: (f, l) => {
+                    if (f.properties) l.bindPopup(generatePopupHtml(f.properties, "🏷️ Lieu-dit"), { className: 'modern-popup' });
+                    l.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); showPieMenu(e, 'map'); });
+                }
+            }).addTo(layerCadastreLd);
+        }
+    }
+
+    function toggleLayer(layer, isVisible) { if (isVisible) map.addLayer(layer); else map.removeLayer(layer); }
+    function exportGeoJSON() { alert("La fonction d'export n'est pas encore activée !"); }
+    async function clearData() { if(confirm("Tout supprimer ?")) { await db.annotations.clear(); renderAnnotations(); } }
+    
+    initData(); renderAnnotations();
+</script>
+</body>
+</html>
