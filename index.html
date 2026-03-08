@@ -51,6 +51,19 @@
         .btn-data { background: #34495e; color: white; }
         .btn-export { background: var(--accent); color: #1e272e; }
         .btn-clear { background: transparent; color: #ffab91; border: 1px solid #ffab91; }
+        
+        /* BOUTON GPS ET SON ANIMATION */
+        .btn-gps { background: #2980b9; color: white; }
+        .btn-gps.active-gps { 
+            background: #e74c3c; 
+            animation: pulse-red 2s infinite; 
+        }
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+        }
+
         .modern-popup .leaflet-popup-content-wrapper { background: var(--bg-dark); color: white; border-radius: 12px; }
         .preview-img { width: 100%; border-radius: 6px; margin-top: 8px; }
         
@@ -156,6 +169,7 @@
         </div>
 
         <div class="controls">
+            <button class="btn btn-gps" id="btn-gps" onclick="toggleGPS()">📍 Suivre GPS</button>
             <button class="btn btn-data" onclick="openDataModal()">📋 Données</button>
             <button class="btn btn-export" onclick="exportGeoJSON()">Exporter SIG</button>
             <button class="btn btn-clear" onclick="clearData()">Vider</button>
@@ -247,9 +261,7 @@
         if (!table) return;
         const tr = table.getElementsByTagName('tr');
 
-        // On commence à 1 pour sauter la ligne d'en-tête (th)
         for (let i = 1; i < tr.length; i++) {
-            // On ignore la ligne d'avertissement de limite des 500 éléments si elle existe
             if (tr[i].cells.length === 1) continue; 
             
             let rowText = tr[i].textContent || tr[i].innerText;
@@ -264,24 +276,18 @@
     function switchTab(datasetName, btnElement) {
         document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
         btnElement.classList.add('active');
-        
-        // Vider la recherche au changement d'onglet
         document.getElementById('table-search').value = ''; 
-
-        // On envoie le CALQUE Leaflet (et plus le fichier geojson brut)
         renderTable(layerGroups[datasetName], datasetName);
     }
 
 function renderTable(layerGroup, datasetName) {
         const container = document.getElementById('table-container');
         
-        // CORRECTION : On fouille dans les sous-groupes pour récupérer les vraies lignes
         let layers = [];
         layerGroup.eachLayer(layer => {
             if (layer.feature) {
-                layers.push(layer); // Si l'élément est directement à la racine
+                layers.push(layer); 
             } else if (layer.eachLayer) {
-                // Si c'est un sous-groupe (ce que L.geoJSON crée par défaut)
                 layer.eachLayer(subLayer => {
                     if (subLayer.feature) layers.push(subLayer);
                 });
@@ -293,7 +299,6 @@ function renderTable(layerGroup, datasetName) {
             return;
         }
 
-        // Récupération des noms de colonnes depuis le premier élément
         let columns = Object.keys(layers[0].feature.properties);
         
         let html = '<table class="data-table" id="data-table"><thead><tr>';
@@ -323,15 +328,12 @@ function renderTable(layerGroup, datasetName) {
         container.innerHTML = html;
     }
 
-    // La fameuse fonction de Zoom au clic !
-// La fameuse fonction de Zoom au clic !
     function zoomToFeature(leafletId, datasetName) {
         const targetGroup = layerGroups[datasetName];
         if(!targetGroup) return;
 
         let targetLayer = null;
 
-        // On fouille à la racine ET dans les sous-dossiers pour trouver notre objet
         targetGroup.eachLayer(layer => {
             if (layer._leaflet_id === leafletId) {
                 targetLayer = layer;
@@ -345,29 +347,70 @@ function renderTable(layerGroup, datasetName) {
         });
 
         if(targetLayer) {
-            closeDataModal(); // On ferme la fenêtre
+            closeDataModal(); 
 
-            // Si le calque était décoché dans le panneau, on l'affiche automatiquement !
             if (!map.hasLayer(targetGroup)) {
                 map.addLayer(targetGroup);
-                // On met à jour visuellement la case à cocher
                 const checkbox = document.getElementById(`chk-${datasetName}`);
                 if (checkbox) checkbox.checked = true;
             }
 
-            // On zoome sur l'objet (ligne/polygone ou point)
             if (targetLayer.getBounds) {
                 map.fitBounds(targetLayer.getBounds(), { padding: [50, 50], maxZoom: 18 });
             } else if (targetLayer.getLatLng) {
                 map.setView(targetLayer.getLatLng(), 18);
             }
             
-            // On déclenche l'ouverture de sa petite bulle d'info !
             targetLayer.openPopup();
         } else {
             console.error("Objet introuvable sur la carte !");
         }
     }
+
+
+    /** GESTION GPS **/
+    let gpsMarker = null;
+    let gpsCircle = null;
+    let isTracking = false;
+
+    function toggleGPS() {
+        const btn = document.getElementById('btn-gps');
+        if (isTracking) {
+            // Arrêter le suivi
+            map.stopLocate();
+            if (gpsMarker) map.removeLayer(gpsMarker);
+            if (gpsCircle) map.removeLayer(gpsCircle);
+            isTracking = false;
+            btn.classList.remove('active-gps');
+            btn.innerHTML = "📍 Suivre GPS";
+        } else {
+            // Démarrer le suivi
+            map.locate({setView: true, maxZoom: 18, watch: true, enableHighAccuracy: true});
+            isTracking = true;
+            btn.classList.add('active-gps');
+            btn.innerHTML = "⏹️ Arrêter GPS";
+        }
+    }
+
+    // Quand le GPS trouve la position
+    map.on('locationfound', function(e) {
+        const radius = e.accuracy / 2;
+        if (!gpsMarker) {
+            gpsMarker = L.marker(e.latlng).addTo(map).bindPopup("Vous êtes dans un rayon de " + Math.round(radius) + " mètres");
+            gpsCircle = L.circle(e.latlng, radius, {color: '#3498db', fillColor: '#3498db', fillOpacity: 0.15}).addTo(map);
+        } else {
+            gpsMarker.setLatLng(e.latlng);
+            gpsCircle.setLatLng(e.latlng);
+            gpsCircle.setRadius(radius);
+        }
+    });
+
+    // En cas d'erreur
+    map.on('locationerror', function(e) {
+        alert("Impossible de vous localiser. Vérifiez que la position est activée sur votre appareil.");
+        if(isTracking) toggleGPS(); // Remet le bouton à zéro
+    });
+
 
     /** PIE MENU **/
     let lastLatLng = null; let selectedAnnotationId = null; const pieMenu = document.getElementById('pie-menu');
@@ -440,9 +483,8 @@ async function renderAnnotations() {
             html += `</div>`;
             m.bindPopup(html, { className: 'modern-popup' });
         });
-    } // Fin normale de la fonction (plus d'accolade orpheline en dessous !)
+    }
 
-    
     const toBase64 = f => new Promise((res) => { const r = new FileReader(); r.readAsDataURL(f); r.onload = () => res(r.result); });
 
     function generatePopupHtml(properties, title) {
