@@ -104,9 +104,9 @@
             justify-content: space-between; align-items: center; color: white;
         }
         .modal-close { cursor: pointer; color: #ff5252; font-size: 24px; font-weight: bold; line-height: 1; }
-        .modal-tabs { display: flex; background: rgba(0,0,0,0.2); }
+        .modal-tabs { display: flex; flex-wrap: wrap; background: rgba(0,0,0,0.2); }
         .tab-btn {
-            flex: 1; padding: 12px; background: none; border: none; color: #aaa;
+            flex: 1 1 auto; padding: 12px; background: none; border: none; color: #aaa;
             cursor: pointer; font-weight: bold; font-size: 13px; border-bottom: 3px solid transparent; transition: 0.2s;
         }
         .tab-btn.active { color: var(--accent); border-bottom: 3px solid var(--accent); background: rgba(255,255,255,0.05); }
@@ -129,8 +129,8 @@
             color: var(--accent); font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); z-index: 10;
         }
         .data-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .data-table tr { cursor: pointer; transition: background 0.1s; } /* Curseur cliquable */
-        .data-table tr:hover td { background: rgba(46, 204, 113, 0.15); } /* Mise en surbrillance au survol */
+        .data-table tr { cursor: pointer; transition: background 0.1s; } 
+        .data-table tr:hover td { background: rgba(46, 204, 113, 0.15); } 
     </style>
 </head>
 <body>
@@ -155,8 +155,7 @@
             <input type="text" id="table-search" onkeyup="filterTable()" placeholder="🔍 Rechercher dans ce tableau (ex: nom de rue, numéro, type...)">
         </div>
 
-        <div class="modal-body" id="table-container">
-            </div>
+        <div class="modal-body" id="table-container"></div>
     </div>
 </div>
 
@@ -205,9 +204,9 @@
     db.version(1).stores({ annotations: '++id, lat, lng, text, image, timestamp' });
 
     const map = L.map('map',{
-    zoomControl:false,
-    preferCanvas:true
-}).setView([46.6,2.2],13);
+        zoomControl:false,
+        preferCanvas:true
+    }).setView([46.6,2.2],13); // Valeur par défaut avant centrage auto
 
     const satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, opacity: 0 }).addTo(map);
     const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, opacity: 0 }).addTo(map);
@@ -281,7 +280,7 @@
         renderTable(layerGroups[datasetName], datasetName);
     }
 
-function renderTable(layerGroup, datasetName) {
+    function renderTable(layerGroup, datasetName) {
         const container = document.getElementById('table-container');
         
         let layers = [];
@@ -322,11 +321,43 @@ function renderTable(layerGroup, datasetName) {
         }
         
         if (layers.length > 500) {
-            html += `<tr><td colspan="${columns.length}" style="text-align:center; padding:15px; color:#e67e22; font-style:italic;">Affichage limité aux 500 premiers éléments par sécurité (utilisez votre logiciel SIG pour les traitements massifs).</td></tr>`;
+            html += `<tr><td colspan="${columns.length}" style="text-align:center; padding:15px; color:#e67e22; font-style:italic;">Affichage limité aux 500 premiers éléments.</td></tr>`;
         }
 
         html += '</tbody></table>';
         container.innerHTML = html;
+    }
+
+    // --- NOUVELLES FONCTIONS DE SURBRILLANCE UNIVERSELLE ---
+    function highlightFeature(e) {
+        let layer = e.target;
+        if (!layer.setStyle) return; // Si c'est un point (note), on ignore
+
+        layer._isHighlighted = true; 
+        
+        if (!layer._originalStyle) {
+            layer._originalStyle = {
+                color: layer.options.color, weight: layer.options.weight,
+                opacity: layer.options.opacity, fillColor: layer.options.fillColor,
+                fillOpacity: layer.options.fillOpacity, className: layer.options.className
+            };
+        }
+
+        layer.setStyle({
+            color: '#f1c40f', 
+            weight: 6,        
+            opacity: 1,       
+            fillColor: '#f1c40f', 
+            fillOpacity: 0.1  
+        });
+    }
+
+    function resetHighlightFeature(e) {
+        let layer = e.target;
+        if (!layer.setStyle || !layer._originalStyle) return;
+
+        layer._isHighlighted = false;
+        layer.setStyle(layer._originalStyle); 
     }
 
     function zoomToFeature(leafletId, datasetName) {
@@ -334,17 +365,9 @@ function renderTable(layerGroup, datasetName) {
         if(!targetGroup) return;
 
         let targetLayer = null;
-
         targetGroup.eachLayer(layer => {
-            if (layer._leaflet_id === leafletId) {
-                targetLayer = layer;
-            } else if (layer.eachLayer) {
-                layer.eachLayer(subLayer => {
-                    if (subLayer._leaflet_id === leafletId) {
-                        targetLayer = subLayer;
-                    }
-                });
-            }
+            if (layer._leaflet_id === leafletId) targetLayer = layer;
+            else if (layer.eachLayer) layer.eachLayer(subLayer => { if (subLayer._leaflet_id === leafletId) targetLayer = subLayer; });
         });
 
         if(targetLayer) {
@@ -356,15 +379,10 @@ function renderTable(layerGroup, datasetName) {
                 if (checkbox) checkbox.checked = true;
             }
 
-            if (targetLayer.getBounds) {
-                map.fitBounds(targetLayer.getBounds(), { padding: [50, 50], maxZoom: 18 });
-            } else if (targetLayer.getLatLng) {
-                map.setView(targetLayer.getLatLng(), 18);
-            }
+            if (targetLayer.getBounds) map.fitBounds(targetLayer.getBounds(), { padding: [50, 50], maxZoom: 18 });
+            else if (targetLayer.getLatLng) map.setView(targetLayer.getLatLng(), 18);
             
             targetLayer.openPopup();
-        } else {
-            console.error("Objet introuvable sur la carte !");
         }
     }
 
@@ -377,7 +395,6 @@ function renderTable(layerGroup, datasetName) {
     function toggleGPS() {
         const btn = document.getElementById('btn-gps');
         if (isTracking) {
-            // Arrêter le suivi
             map.stopLocate();
             if (gpsMarker) map.removeLayer(gpsMarker);
             if (gpsCircle) map.removeLayer(gpsCircle);
@@ -385,7 +402,6 @@ function renderTable(layerGroup, datasetName) {
             btn.classList.remove('active-gps');
             btn.innerHTML = "📍 Suivre GPS";
         } else {
-            // Démarrer le suivi
             map.locate({setView: true, maxZoom: 18, watch: true, enableHighAccuracy: true});
             isTracking = true;
             btn.classList.add('active-gps');
@@ -393,7 +409,6 @@ function renderTable(layerGroup, datasetName) {
         }
     }
 
-    // Quand le GPS trouve la position
     map.on('locationfound', function(e) {
         const radius = e.accuracy / 2;
         if (!gpsMarker) {
@@ -406,10 +421,9 @@ function renderTable(layerGroup, datasetName) {
         }
     });
 
-    // En cas d'erreur
     map.on('locationerror', function(e) {
         alert("Impossible de vous localiser. Vérifiez que la position est activée sur votre appareil.");
-        if(isTracking) toggleGPS(); // Remet le bouton à zéro
+        if(isTracking) toggleGPS(); 
     });
 
 
@@ -456,13 +470,12 @@ function renderTable(layerGroup, datasetName) {
         window.activeMarker._saved = true; map.closePopup(); renderAnnotations();
     }
 
-async function renderAnnotations() {
+    async function renderAnnotations() {
         layerAnnotations.clearLayers();
         const items = await db.annotations.toArray();
         items.forEach(i => {
             const m = L.marker([i.lat, i.lng]).addTo(layerAnnotations);
             
-            // On déguise ce marqueur en objet avec des "propriétés"
             m.feature = {
                 properties: {
                     "Description": i.text || "(Photo sans texte)",
@@ -472,13 +485,11 @@ async function renderAnnotations() {
                 }
             };
             
-            // Clic droit
             m.on('contextmenu', (e) => {
                 L.DomEvent.stopPropagation(e);
                 showPieMenu(e, 'marker', i.id);
             });
 
-            // Popup (clic gauche)
             let html = `<div style="min-width:150px"><b>Note:</b><br>${i.text}`;
             if (i.image) html += `<br><img src="${i.image}" class="preview-img">`;
             html += `</div>`;
@@ -511,61 +522,104 @@ async function renderAnnotations() {
                 style: { color: "#ffffff", weight: 3, fillOpacity: 0, interactive: false } 
             }).addTo(layerContour);
 
-            // 1. On calcule la "boîte" qui englobe parfaitement ta commune
             const limitesCommune = contourFeature.getBounds();
-
-            // 2. On centre la carte sur ces limites au démarrage
             map.fitBounds(limitesCommune);
-
-            // 3. On bloque la caméra pour ne pas pouvoir sortir de cette zone
-            // Le "pad(0.3)" ajoute une petite marge de 30% autour pour voir les bords
             map.setMaxBounds(limitesCommune.pad(0.3));
-
-            // 4. On empêche de dézoomer plus loin que la vue globale de la commune
             map.setMinZoom(map.getZoom() - 0.5); 
         }
+
         if (typeof dataVoiries !== 'undefined') {
             const vLayer = L.geoJSON(dataVoiries, {
                 style: (f) => ({ color: (f.properties.ref || "").startsWith('D') ? "#e67e22" : "#6d7d59", weight: 4, opacity: 0.8, className: 'shadow-voirie' }),
                 onEachFeature: (f, l) => {
-                    l.on('mouseover', (e) => e.target.setStyle({ weight: 8, color: '#2ecc71', opacity: 1 })); l.on('mouseout', (e) => vLayer.resetStyle(e.target));
+                    l.on('mouseover', (e) => { if (!e.target._isHighlighted) e.target.setStyle({ weight: 8, color: '#2ecc71', opacity: 1 }); });
+                    l.on('mouseout', (e) => { if (!e.target._isHighlighted) vLayer.resetStyle(e.target); });
+                    
                     if (f.properties) l.bindPopup(generatePopupHtml(f.properties, "🛣️ Info Voirie"), { className: 'modern-popup' });
                     l.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); showPieMenu(e, 'map'); });
+                    
+                    l.on('popupopen', highlightFeature);
+                    l.on('popupclose', resetHighlightFeature);
                 }
             }).addTo(layerVoiries);
-            try { map.fitBounds(vLayer.getBounds()); } catch(e) {}
         }
+
         if (typeof dataCadastreParc !== 'undefined') {
             L.geoJSON(dataCadastreParc, {
                 style: { color: "#f39c12", weight: 1, fillOpacity: 0.05 },
                 onEachFeature: (f, l) => {
                     if (f.properties) l.bindPopup(generatePopupHtml(f.properties, "🟧 Parcelle"), { className: 'modern-popup' });
                     l.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); showPieMenu(e, 'map'); });
+                    
+                    l.on('popupopen', highlightFeature);
+                    l.on('popupclose', resetHighlightFeature);
                 }
             }).addTo(layerCadastreParc);
         }
+
         if (typeof dataCadastreBat !== 'undefined') {
             L.geoJSON(dataCadastreBat, {
                 style: { color: "#c0392b", weight: 1, fillColor: "#e74c3c", fillOpacity: 0.4 },
                 onEachFeature: (f, l) => {
                     if (f.properties) l.bindPopup(generatePopupHtml(f.properties, "🧱 Bâtiment"), { className: 'modern-popup' });
                     l.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); showPieMenu(e, 'map'); });
+                    
+                    l.on('popupopen', highlightFeature);
+                    l.on('popupclose', resetHighlightFeature);
                 }
             }).addTo(layerCadastreBat);
         }
+
         if (typeof dataCadastreLd !== 'undefined') {
             L.geoJSON(dataCadastreLd, {
                 style: { color: "#9b59b6", weight: 2, fillOpacity: 0.1 },
                 onEachFeature: (f, l) => {
                     if (f.properties) l.bindPopup(generatePopupHtml(f.properties, "🏷️ Lieu-dit"), { className: 'modern-popup' });
                     l.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); showPieMenu(e, 'map'); });
+                    
+                    l.on('popupopen', highlightFeature);
+                    l.on('popupclose', resetHighlightFeature);
                 }
             }).addTo(layerCadastreLd);
         }
     }
 
     function toggleLayer(layer, isVisible) { if (isVisible) map.addLayer(layer); else map.removeLayer(layer); }
-    function exportGeoJSON() { alert("La fonction d'export n'est pas encore activée !"); }
+    
+    // Fonction d'exportation GeoJSON
+    async function exportGeoJSON() {
+        const items = await db.annotations.toArray();
+        if (items.length === 0) {
+            alert("Aucune donnée à exporter !");
+            return;
+        }
+
+        const geojson = {
+            type: "FeatureCollection",
+            features: items.map(item => ({
+                type: "Feature",
+                geometry: { type: "Point", coordinates: [item.lng, item.lat] },
+                properties: {
+                    id: item.id,
+                    description: item.text || "",
+                    date_saisie: new Date(item.timestamp).toISOString(),
+                    has_image: !!item.image,
+                    image_base64: item.image || null 
+                }
+            }))
+        };
+
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(geojson));
+        const downloadAnchorNode = document.createElement('a');
+        const dateStr = new Date().toISOString().slice(0, 10);
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", `notes_terrain_${dateStr}.geojson`);
+        
+        document.body.appendChild(downloadAnchorNode); 
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+    }
+
     async function clearData() { if(confirm("Tout supprimer ?")) { await db.annotations.clear(); renderAnnotations(); } }
     
     initData(); renderAnnotations();
@@ -581,5 +635,3 @@ async function renderAnnotations() {
 </script>
 </body>
 </html>
-
-
