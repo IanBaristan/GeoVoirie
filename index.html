@@ -23,11 +23,11 @@
         #map { flex: 1; width: 100%; background: #1e272e !important; position: relative; }
 
         .header-sliders {
-            display: flex; gap: 20px; align-items: center; background: rgba(0, 0, 0, 0.2);
-            padding: 6px 15px; border-radius: 20px;
+            display: flex; gap: 12px; align-items: center; background: rgba(0, 0, 0, 0.2);
+            padding: 6px 15px; border-radius: 20px; flex-wrap: wrap;
         }
-        .ctrl-group { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: bold; }
-        .ctrl-group input { cursor: pointer; accent-color: var(--accent); width: 80px; }
+        .ctrl-group { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: bold; }
+        .ctrl-group input { cursor: pointer; accent-color: var(--accent); width: 60px; }
 
         /* PIE MENU */
         #pie-menu { position: absolute; width: 200px; height: 200px; z-index: 2000; display: none; pointer-events: none; }
@@ -46,7 +46,7 @@
         .pie-item.delete:hover { background: #ff5252; color: white; }
 
         /* UI GENERALE */
-        .controls { display: flex; gap: 8px; }
+        .controls { display: flex; gap: 8px; flex-wrap: wrap; }
         .btn { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: 0.2s; }
         .btn:hover { opacity: 0.8; }
         .btn-data { background: #34495e; color: white; }
@@ -131,6 +131,39 @@
         .data-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
         .data-table tr { cursor: pointer; transition: background 0.1s; } 
         .data-table tr:hover td { background: rgba(46, 204, 113, 0.15); } 
+        
+/* MARQUEURS DE NOTES MODERNES */
+        /* 1. Le conteneur Leaflet reste invisible pour garder les coordonnées intactes */
+        .modern-note-icon {
+            background: transparent;
+            border: none;
+        }
+        
+        /* 2. Notre vraie pastille visible à l'intérieur */
+        .note-icon-inner {
+            width: 100%;
+            height: 100%;
+            background-color: rgba(30, 39, 46, 0.95);
+            border: 2px solid var(--accent);
+            border-radius: 50%;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.2s ease, background-color 0.2s ease;
+            box-sizing: border-box;
+        }
+        
+        /* 3. L'animation s'applique uniquement à l'intérieur */
+        .modern-note-icon:hover .note-icon-inner {
+            transform: scale(1.2);
+            background-color: var(--accent);
+            box-shadow: 0 4px 15px rgba(46, 204, 113, 0.6);
+        }
+
+        .modern-note-icon:hover .note-icon-inner svg {
+            stroke: var(--primary) !important;
+        }
     </style>
 </head>
 <body>
@@ -149,6 +182,7 @@
             <button class="tab-btn" onclick="switchTab('batiments', this)">🧱 Bâtiments</button>
             <button class="tab-btn" onclick="switchTab('lieuxdits', this)">🏷️ Lieux-dits</button>
             <button class="tab-btn" onclick="switchTab('notes', this)">📝 Notes</button>
+            <button class="tab-btn" onclick="switchTab('rivieres', this)">💧 Rivières</button>
         </div>
         
         <div class="modal-search">
@@ -164,8 +198,10 @@
         <div><strong>GéoVoirie <span style="color:var(--accent)">v1.0</span></strong></div>
         
         <div class="header-sliders">
-            <div class="ctrl-group"><span>🛰️ SAT</span><input type="range" autocomplete="off" id="sat-op" min="0" max="1" step="0.1" value="0" oninput="satLayer.setOpacity(this.value)"></div>
-            <div class="ctrl-group"><span>🗺️ PLAN</span><input type="range" autocomplete="off" id="osm-op" min="0" max="1" step="0.1" value="0" oninput="osmLayer.setOpacity(this.value)"></div>
+            <div class="ctrl-group"><span>🛰️ SAT</span><input type="range" autocomplete="off" min="0" max="1" step="0.1" value="0" oninput="satLayer.setOpacity(this.value)"></div>
+            <div class="ctrl-group"><span>🗺️ PLAN</span><input type="range" autocomplete="off" min="0" max="1" step="0.1" value="0" oninput="osmLayer.setOpacity(this.value)"></div>
+            <div class="ctrl-group"><span>🇫🇷 IGN</span><input type="range" autocomplete="off" min="0" max="1" step="0.1" value="0" oninput="ignLayer.setOpacity(this.value)"></div>
+            <div class="ctrl-group"><span>⚫ SOMBRE</span><input type="range" autocomplete="off" min="0" max="1" step="0.1" value="0" oninput="darkLayer.setOpacity(this.value)"></div>            <div class="ctrl-group"><span>⛰️ TOPO</span><input type="range" autocomplete="off" min="0" max="1" step="0.1" value="0" oninput="topoLayer.setOpacity(this.value)"></div>
         </div>
 
         <div class="controls">
@@ -189,6 +225,7 @@
                 <label><input type="checkbox" id="chk-lieuxdits" autocomplete="off" onchange="toggleLayer(layerCadastreLd, this.checked)"> 🏷️ Lieux-dits</label>
                 <label><input type="checkbox" id="chk-limites" autocomplete="off" checked onchange="toggleLayer(layerContour, this.checked)"> 📍 Limites</label>
                 <label><input type="checkbox" id="chk-notes" autocomplete="off" checked onchange="toggleLayer(layerAnnotations, this.checked)"> 📝 Notes</label>
+                <label><input type="checkbox" id="chk-rivieres" autocomplete="off" checked onchange="toggleLayer(layerRivieres, this.checked)"> 💧 Rivières</label>
             </div>
         </div>
     </div>
@@ -198,7 +235,9 @@
 <script src="contour.js"></script>
 <script src="cadastreParc.js"></script> 
 <script src="cadastreBat.js"></script>
-<script src="cadastreLd.js"></script> 
+<script src="cadastreLd.js"></script>
+<script src="rivieres.js"></script>
+<script src="annotations.js"></script>
 <script>
     const db = new Dexie("VoirieDB");
     db.version(1).stores({ annotations: '++id, lat, lng, text, image, timestamp' });
@@ -206,29 +245,30 @@
     const map = L.map('map',{
         zoomControl:false,
         preferCanvas:true
-    }).setView([46.6,2.2],13); // Valeur par défaut avant centrage auto
+    }).setView([46.6,2.2],13);
 
     const satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, opacity: 0 }).addTo(map);
     const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, opacity: 0 }).addTo(map);
+    const ignLayer = L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}', { maxZoom: 19, opacity: 0 }).addTo(map);
+    const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, opacity: 0 }).addTo(map);    const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxNativeZoom: 17, maxZoom: 19, opacity: 0 }).addTo(map);
     
-    // Initialisation des calques Leaflet
     const layerContour = L.layerGroup().addTo(map);
     const layerVoiries = L.layerGroup().addTo(map);
     const layerAnnotations = L.layerGroup().addTo(map);
     const layerCadastreParc = L.layerGroup();
     const layerCadastreBat = L.layerGroup();
     const layerCadastreLd = L.layerGroup();
+    const layerRivieres = L.layerGroup().addTo(map);
 
-    // Dictionnaire pour lier les noms d'onglets aux calques Leaflet
     const layerGroups = {
         'voiries': layerVoiries,
         'parcelles': layerCadastreParc,
         'batiments': layerCadastreBat,
         'lieuxdits': layerCadastreLd,
+        'rivieres': layerRivieres,
         'notes': layerAnnotations
     };
 
-    // Sécurisation interactions UI
     const filterPanel = document.getElementById('filter-panel');
     L.DomEvent.disableClickPropagation(filterPanel);
     L.DomEvent.disableScrollPropagation(filterPanel);
@@ -243,17 +283,12 @@
         }
     }
 
-    /** GESTION DES TABLEAUX & RECHERCHE **/
     function openDataModal() {
         document.getElementById('data-modal').style.display = 'flex';
         document.querySelector('.tab-btn.active').click(); 
     }
+    function closeDataModal() { document.getElementById('data-modal').style.display = 'none'; }
 
-    function closeDataModal() {
-        document.getElementById('data-modal').style.display = 'none';
-    }
-
-    // Filtre de recherche dynamique
     function filterTable() {
         const input = document.getElementById('table-search');
         const filter = input.value.toLowerCase();
@@ -263,13 +298,9 @@
 
         for (let i = 1; i < tr.length; i++) {
             if (tr[i].cells.length === 1) continue; 
-            
             let rowText = tr[i].textContent || tr[i].innerText;
-            if (rowText.toLowerCase().indexOf(filter) > -1) {
-                tr[i].style.display = "";
-            } else {
-                tr[i].style.display = "none";
-            }
+            if (rowText.toLowerCase().indexOf(filter) > -1) tr[i].style.display = "";
+            else tr[i].style.display = "none";
         }
     }
 
@@ -285,13 +316,8 @@
         
         let layers = [];
         layerGroup.eachLayer(layer => {
-            if (layer.feature) {
-                layers.push(layer); 
-            } else if (layer.eachLayer) {
-                layer.eachLayer(subLayer => {
-                    if (subLayer.feature) layers.push(subLayer);
-                });
-            }
+            if (layer.feature) layers.push(layer); 
+            else if (layer.eachLayer) layer.eachLayer(subLayer => { if (subLayer.feature) layers.push(subLayer); });
         });
 
         if (layers.length === 0) {
@@ -300,13 +326,11 @@
         }
 
         let columns = Object.keys(layers[0].feature.properties);
-        
         let html = '<table class="data-table" id="data-table"><thead><tr>';
         columns.forEach(col => html += `<th>${col}</th>`);
         html += '</tr></thead><tbody>';
 
         const maxRows = Math.min(layers.length, 500);
-        
         for(let i = 0; i < maxRows; i++) {
             let layer = layers[i];
             let props = layer.feature.properties || {};
@@ -320,18 +344,16 @@
             html += '</tr>';
         }
         
-        if (layers.length > 500) {
-            html += `<tr><td colspan="${columns.length}" style="text-align:center; padding:15px; color:#e67e22; font-style:italic;">Affichage limité aux 500 premiers éléments.</td></tr>`;
-        }
-
-        html += '</tbody></table>';
-        container.innerHTML = html;
+        if (layers.length > 500) html += `<tr><td colspan="${columns.length}" style="text-align:center; padding:15px; color:#e67e22; font-style:italic;">Affichage limité aux 500 premiers éléments par sécurité.</td></tr>`;
+        html += '</tbody></table>'; container.innerHTML = html;
     }
 
-    // --- NOUVELLES FONCTIONS DE SURBRILLANCE UNIVERSELLE ---
+    let currentHighlight = null;
+    let currentHighlightOriginalStyle = null;
+
     function highlightFeature(e) {
         let layer = e.target;
-        if (!layer.setStyle) return; // Si c'est un point (note), on ignore
+        if (!layer.setStyle) return; 
 
         layer._isHighlighted = true; 
         
@@ -342,20 +364,12 @@
                 fillOpacity: layer.options.fillOpacity, className: layer.options.className
             };
         }
-
-        layer.setStyle({
-            color: '#f1c40f', 
-            weight: 6,        
-            opacity: 1,       
-            fillColor: '#f1c40f', 
-            fillOpacity: 0.1  
-        });
+        layer.setStyle({ color: '#f1c40f', weight: 6, opacity: 1, fillColor: '#f1c40f', fillOpacity: 0.1 });
     }
 
     function resetHighlightFeature(e) {
         let layer = e.target;
         if (!layer.setStyle || !layer._originalStyle) return;
-
         layer._isHighlighted = false;
         layer.setStyle(layer._originalStyle); 
     }
@@ -372,25 +386,20 @@
 
         if(targetLayer) {
             closeDataModal(); 
-
             if (!map.hasLayer(targetGroup)) {
                 map.addLayer(targetGroup);
                 const checkbox = document.getElementById(`chk-${datasetName}`);
                 if (checkbox) checkbox.checked = true;
             }
-
             if (targetLayer.getBounds) map.fitBounds(targetLayer.getBounds(), { padding: [50, 50], maxZoom: 18 });
             else if (targetLayer.getLatLng) map.setView(targetLayer.getLatLng(), 18);
-            
             targetLayer.openPopup();
         }
     }
 
 
     /** GESTION GPS **/
-    let gpsMarker = null;
-    let gpsCircle = null;
-    let isTracking = false;
+    let gpsMarker = null; let gpsCircle = null; let isTracking = false;
 
     function toggleGPS() {
         const btn = document.getElementById('btn-gps');
@@ -412,12 +421,10 @@
     map.on('locationfound', function(e) {
         const radius = e.accuracy / 2;
         if (!gpsMarker) {
-            gpsMarker = L.marker(e.latlng).addTo(map).bindPopup("Vous êtes dans un rayon de " + Math.round(radius) + " mètres");
+            gpsMarker = L.marker(e.latlng).addTo(map).bindPopup("Précision GPS: " + Math.round(radius) + " mètres");
             gpsCircle = L.circle(e.latlng, radius, {color: '#3498db', fillColor: '#3498db', fillOpacity: 0.15}).addTo(map);
         } else {
-            gpsMarker.setLatLng(e.latlng);
-            gpsCircle.setLatLng(e.latlng);
-            gpsCircle.setRadius(radius);
+            gpsMarker.setLatLng(e.latlng); gpsCircle.setLatLng(e.latlng); gpsCircle.setRadius(radius);
         }
     });
 
@@ -430,6 +437,21 @@
     /** PIE MENU **/
     let lastLatLng = null; let selectedAnnotationId = null; const pieMenu = document.getElementById('pie-menu');
     window.addEventListener('contextmenu', e => e.preventDefault());
+
+    // Déclaration de l'icône vectorielle
+// Déclaration de l'icône vectorielle corrigée
+    const noteIcon = L.divIcon({
+        className: 'modern-note-icon',
+        html: `<div class="note-icon-inner">
+                   <svg viewBox="0 0 24 24" width="14" height="14" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" style="transition: stroke 0.2s; margin-top: 1px;">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                      <circle cx="12" cy="10" r="3"></circle>
+                   </svg>
+               </div>`,
+        iconSize: [26, 26],            
+        iconAnchor: [13, 13],          
+        popupAnchor: [0, -13]          
+    });
 
     function showPieMenu(e, type, id = null) {
         lastLatLng = e.latlng; selectedAnnotationId = id; const pos = map.latLngToContainerPoint(e.latlng);
@@ -453,11 +475,16 @@
     async function handlePieAction(action) {
         pieMenu.style.display = 'none'; if (action === 'cancel') return;
         if (action === 'delete') { if(confirm("Supprimer cette note ?")) { await db.annotations.delete(selectedAnnotationId); renderAnnotations(); } return; }
-        const tempMarker = L.marker(lastLatLng).addTo(map); const isPhoto = (action === 'photo');
+        
+        // CORRECTION : utilisation de l'icône SVG pour le marqueur temporaire
+        const tempMarker = L.marker(lastLatLng, { icon: noteIcon }).addTo(map); 
+        const isPhoto = (action === 'photo');
+        
         tempMarker.bindPopup(`<div class="popup-form"><b style="color:var(--accent)">${action.toUpperCase()}</b>
             <textarea id="pop_text" rows="3" placeholder="Texte..."></textarea>
             <input type="file" id="pop_file" style="display:${isPhoto ? 'block' : 'none'}">
             <button class="btn btn-export" style="width:100%;margin-top:10px" onclick="saveAnnotation(${lastLatLng.lat}, ${lastLatLng.lng})">ENREGISTRER</button></div>`, { className: 'modern-popup' }).openPopup();
+        
         tempMarker._saved = false; window.activeMarker = tempMarker;
         tempMarker.on('popupclose', () => { if(!tempMarker._saved) map.removeLayer(tempMarker); });
     }
@@ -467,14 +494,22 @@
         if (!text && !file) { alert("Veuillez saisir un texte ou ajouter une photo."); return; }
         let img = file ? await toBase64(file) : null;
         await db.annotations.add({ lat, lng, text, image: img, timestamp: new Date() });
-        window.activeMarker._saved = true; map.closePopup(); renderAnnotations();
+        
+        window.activeMarker._saved = true; 
+        map.closePopup(); 
+        
+        // CORRECTION : suppression du marqueur temporaire après la sauvegarde
+        map.removeLayer(window.activeMarker); 
+        
+        renderAnnotations();
     }
 
     async function renderAnnotations() {
         layerAnnotations.clearLayers();
         const items = await db.annotations.toArray();
+
         items.forEach(i => {
-            const m = L.marker([i.lat, i.lng]).addTo(layerAnnotations);
+            const m = L.marker([i.lat, i.lng], { icon: noteIcon }).addTo(layerAnnotations);
             
             m.feature = {
                 properties: {
@@ -485,11 +520,8 @@
                 }
             };
             
-            m.on('contextmenu', (e) => {
-                L.DomEvent.stopPropagation(e);
-                showPieMenu(e, 'marker', i.id);
-            });
-
+            m.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); showPieMenu(e, 'marker', i.id); });
+            
             let html = `<div style="min-width:150px"><b>Note:</b><br>${i.text}`;
             if (i.image) html += `<br><img src="${i.image}" class="preview-img">`;
             html += `</div>`;
@@ -511,17 +543,12 @@
                          </tr>`;
             }
         }
-        html += `</table></div>`;
-        return html;
+        html += `</table></div>`; return html;
     }
     
     function initData() {
-        // 📍 Contour de la commune et restriction de la carte
         if (typeof dataContour !== 'undefined') {
-            const contourFeature = L.geoJSON(dataContour, { 
-                style: { color: "#ffffff", weight: 3, fillOpacity: 0, interactive: false } 
-            }).addTo(layerContour);
-
+            const contourFeature = L.geoJSON(dataContour, { style: { color: "#ffffff", weight: 3, fillOpacity: 0, interactive: false } }).addTo(layerContour);
             const limitesCommune = contourFeature.getBounds();
             map.fitBounds(limitesCommune);
             map.setMaxBounds(limitesCommune.pad(0.3));
@@ -534,10 +561,8 @@
                 onEachFeature: (f, l) => {
                     l.on('mouseover', (e) => { if (!e.target._isHighlighted) e.target.setStyle({ weight: 8, color: '#2ecc71', opacity: 1 }); });
                     l.on('mouseout', (e) => { if (!e.target._isHighlighted) vLayer.resetStyle(e.target); });
-                    
                     if (f.properties) l.bindPopup(generatePopupHtml(f.properties, "🛣️ Info Voirie"), { className: 'modern-popup' });
                     l.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); showPieMenu(e, 'map'); });
-                    
                     l.on('popupopen', highlightFeature);
                     l.on('popupclose', resetHighlightFeature);
                 }
@@ -550,7 +575,6 @@
                 onEachFeature: (f, l) => {
                     if (f.properties) l.bindPopup(generatePopupHtml(f.properties, "🟧 Parcelle"), { className: 'modern-popup' });
                     l.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); showPieMenu(e, 'map'); });
-                    
                     l.on('popupopen', highlightFeature);
                     l.on('popupclose', resetHighlightFeature);
                 }
@@ -563,7 +587,6 @@
                 onEachFeature: (f, l) => {
                     if (f.properties) l.bindPopup(generatePopupHtml(f.properties, "🧱 Bâtiment"), { className: 'modern-popup' });
                     l.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); showPieMenu(e, 'map'); });
-                    
                     l.on('popupopen', highlightFeature);
                     l.on('popupclose', resetHighlightFeature);
                 }
@@ -576,48 +599,48 @@
                 onEachFeature: (f, l) => {
                     if (f.properties) l.bindPopup(generatePopupHtml(f.properties, "🏷️ Lieu-dit"), { className: 'modern-popup' });
                     l.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); showPieMenu(e, 'map'); });
-                    
                     l.on('popupopen', highlightFeature);
                     l.on('popupclose', resetHighlightFeature);
                 }
             }).addTo(layerCadastreLd);
         }
+        if (typeof dataRivieres !== 'undefined') {
+            const rLayer = L.geoJSON(dataRivieres, {
+                style: { color: "#3498db", weight: 4, opacity: 0.5 }, 
+                onEachFeature: (f, l) => {
+                    l.on('mouseover', (e) => { if (!e.target._isHighlighted) e.target.setStyle({ weight: 8, color: '#2980b9', opacity: 1 }); });
+                    l.on('mouseout', (e) => { if (!e.target._isHighlighted) rLayer.resetStyle(e.target); });
+                    
+                    if (f.properties) l.bindPopup(generatePopupHtml(f.properties, "💧 Cours d'eau"), { className: 'modern-popup' });
+                    l.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); showPieMenu(e, 'map'); });
+                    
+                    l.on('popupopen', highlightFeature);
+                    l.on('popupclose', resetHighlightFeature);
+                }
+            }).addTo(layerRivieres);
+        }
+        
+        
     }
 
     function toggleLayer(layer, isVisible) { if (isVisible) map.addLayer(layer); else map.removeLayer(layer); }
     
-    // Fonction d'exportation GeoJSON
     async function exportGeoJSON() {
         const items = await db.annotations.toArray();
-        if (items.length === 0) {
-            alert("Aucune donnée à exporter !");
-            return;
-        }
-
+        if (items.length === 0) { alert("Aucune donnée à exporter !"); return; }
         const geojson = {
             type: "FeatureCollection",
             features: items.map(item => ({
                 type: "Feature",
                 geometry: { type: "Point", coordinates: [item.lng, item.lat] },
-                properties: {
-                    id: item.id,
-                    description: item.text || "",
-                    date_saisie: new Date(item.timestamp).toISOString(),
-                    has_image: !!item.image,
-                    image_base64: item.image || null 
-                }
+                properties: { id: item.id, description: item.text || "", date_saisie: new Date(item.timestamp).toISOString(), has_image: !!item.image, image_base64: item.image || null }
             }))
         };
-
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(geojson));
         const downloadAnchorNode = document.createElement('a');
-        const dateStr = new Date().toISOString().slice(0, 10);
         downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", `notes_terrain_${dateStr}.geojson`);
-        
-        document.body.appendChild(downloadAnchorNode); 
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
+        downloadAnchorNode.setAttribute("download", `notes_terrain_${new Date().toISOString().slice(0, 10)}.geojson`);
+        document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove();
     }
 
     async function clearData() { if(confirm("Tout supprimer ?")) { await db.annotations.clear(); renderAnnotations(); } }
@@ -627,9 +650,7 @@
 <script>
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('sw.js')
-                .then(reg => console.log('Service Worker enregistré !'))
-                .catch(err => console.log('Erreur Service Worker :', err));
+            navigator.serviceWorker.register('sw.js').then(reg => console.log('Service Worker OK!')).catch(err => console.log('Erreur SW :', err));
         });
     }
 </script>
