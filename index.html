@@ -505,7 +505,25 @@ async function renderAnnotations() {
     }
     
     function initData() {
-        if (typeof dataContour !== 'undefined') L.geoJSON(dataContour, { style: { color: "#ffffff", weight: 2, fillOpacity: 0, interactive: false } }).addTo(layerContour);
+        // 📍 Contour de la commune et restriction de la carte
+        if (typeof dataContour !== 'undefined') {
+            const contourFeature = L.geoJSON(dataContour, { 
+                style: { color: "#ffffff", weight: 3, fillOpacity: 0, interactive: false } 
+            }).addTo(layerContour);
+
+            // 1. On calcule la "boîte" qui englobe parfaitement ta commune
+            const limitesCommune = contourFeature.getBounds();
+
+            // 2. On centre la carte sur ces limites au démarrage
+            map.fitBounds(limitesCommune);
+
+            // 3. On bloque la caméra pour ne pas pouvoir sortir de cette zone
+            // Le "pad(0.3)" ajoute une petite marge de 30% autour pour voir les bords
+            map.setMaxBounds(limitesCommune.pad(0.3));
+
+            // 4. On empêche de dézoomer plus loin que la vue globale de la commune
+            map.setMinZoom(map.getZoom() - 0.5); 
+        }
         if (typeof dataVoiries !== 'undefined') {
             const vLayer = L.geoJSON(dataVoiries, {
                 style: (f) => ({ color: (f.properties.ref || "").startsWith('D') ? "#e67e22" : "#6d7d59", weight: 4, opacity: 0.8, className: 'shadow-voirie' }),
@@ -563,4 +581,5 @@ async function renderAnnotations() {
 </script>
 </body>
 </html>
+
 
